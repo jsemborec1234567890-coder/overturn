@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  contextFrom,
   createGorgiasDraftDetector,
   decideOnSend,
   extractOrderFields,
@@ -9,11 +8,7 @@ import {
   statusLine,
   stripHtml,
 } from "./capture.js";
-import {
-  DEFAULT_SETTINGS,
-  type DraftState,
-  type GorgiasTicketSnapshot,
-} from "./types.js";
+import { DEFAULT_SETTINGS, type DraftState, type GorgiasTicketSnapshot } from "./types.js";
 
 const sampleGorgiasTicket: GorgiasTicketSnapshot = {
   id: "904128",
@@ -98,10 +93,10 @@ describe("Gorgias Capture Adapter Unit Suite", () => {
     expect(reasons.some((r) => r.code === "wrong_amount_or_date")).toBe(true);
 
     const orderFields = extractOrderFields(sampleGorgiasTicket, settings);
-    expect(orderFields["order_id"]).toBe("shopify_order_5521");
-    expect(orderFields["order_number"]).toBe("#10842");
-    expect(orderFields["order_total"]).toBe(149.99);
-    expect(orderFields["tracking_number"]).toBe("UPS-1Z9999999999999999");
+    expect(orderFields.order_id).toBe("shopify_order_5521");
+    expect(orderFields.order_number).toBe("#10842");
+    expect(orderFields.order_total).toBe(149.99);
+    expect(orderFields.tracking_number).toBe("UPS-1Z9999999999999999");
   });
 
   it("criterion 3: generates POST /v1/capture payload with source: gorgias and externalId: gr:<id>", () => {
@@ -133,7 +128,7 @@ describe("Gorgias Capture Adapter Unit Suite", () => {
       expect(decision.body.externalId).toBe("gr:904128");
       expect(decision.body.tags).toContain("draft:ai");
       expect(decision.body.tags).toContain("public-reply");
-      expect(decision.body.draft.fields?.["order_number"]).toBe("#10842");
+      expect(decision.body.draft.fields?.order_number).toBe("#10842");
       expect(decision.body.context.length).toBe(2);
       expect(decision.body.context[0].role).toBe("customer");
       expect(decision.body.context[1].role).toBe("note");
@@ -210,6 +205,8 @@ describe("Gorgias Capture Adapter Unit Suite", () => {
   });
 
   it("stripHtml cleans rich HTML tags correctly", () => {
-    expect(stripHtml("<div>Order status: <b>Shipped</b><br/>Thanks!</div>")).toBe("Order status: Shipped\nThanks!");
+    expect(stripHtml("<div>Order status: <b>Shipped</b><br/>Thanks!</div>")).toBe(
+      "Order status: Shipped\nThanks!",
+    );
   });
 });

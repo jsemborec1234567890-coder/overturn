@@ -4,9 +4,8 @@ import {
   type CaptureCreate,
   type CaptureMessage,
   DEFAULT_SETTINGS,
-  diffCaptureAnswers,
-  type DraftOrigin,
   type DraftState,
+  diffCaptureAnswers,
   type GorgiasTicketSnapshot,
   normalizeCaptureText,
   type PendingSend,
@@ -114,7 +113,8 @@ export function createGorgiasDraftDetector(opts: {
       }
 
       const grew = text.length - prev.text.length;
-      const jump = grew >= opts.minDraftChars && (prev.text.length < opts.minDraftChars / 2 || now - prev.at > window);
+      const jump =
+        grew >= opts.minDraftChars && (prev.text.length < opts.minDraftChars / 2 || now - prev.at > window);
       const first = firstSight && text.length >= opts.minDraftChars;
 
       if (jump || first) {
@@ -177,12 +177,12 @@ export function extractOrderFields(
 
   if (settings.includeOrderContext && ticket.orderContext) {
     const oc = ticket.orderContext;
-    if (oc.orderId) fields["order_id"] = oc.orderId;
-    if (oc.orderNumber) fields["order_number"] = oc.orderNumber;
-    if (oc.totalPrice !== undefined && oc.totalPrice !== null) fields["order_total"] = oc.totalPrice;
-    if (oc.financialStatus) fields["financial_status"] = oc.financialStatus;
-    if (oc.fulfillmentStatus) fields["fulfillment_status"] = oc.fulfillmentStatus;
-    if (oc.trackingNumber) fields["tracking_number"] = oc.trackingNumber;
+    if (oc.orderId) fields.order_id = oc.orderId;
+    if (oc.orderNumber) fields.order_number = oc.orderNumber;
+    if (oc.totalPrice !== undefined && oc.totalPrice !== null) fields.order_total = oc.totalPrice;
+    if (oc.financialStatus) fields.financial_status = oc.financialStatus;
+    if (oc.fulfillmentStatus) fields.fulfillment_status = oc.fulfillmentStatus;
+    if (oc.trackingNumber) fields.tracking_number = oc.trackingNumber;
   }
 
   // Include custom decision fields configured by admin
@@ -222,7 +222,9 @@ export function decideOnSend(input: {
   const orderFields = extractOrderFields(ticket, settings);
   const draftAnswer: CaptureAnswer = {
     text: stripHtml(draft.text),
-    ...(Object.keys(orderFields).length > 0 ? { fields: { ...orderFields, ...(input.draftFields ?? {}) } } : {}),
+    ...(Object.keys(orderFields).length > 0
+      ? { fields: { ...orderFields, ...(input.draftFields ?? {}) } }
+      : {}),
   };
   const sentAnswer: CaptureAnswer = {
     text: sentText,
@@ -280,11 +282,7 @@ export function statusLine(
 
   const words = draft.wordCount || draft.text.trim().split(/\s+/).length;
   const from =
-    draft.origin === "ai_assist"
-      ? "from AI assist"
-      : draft.origin === "manual"
-      ? "typed by you"
-      : "inserted";
+    draft.origin === "ai_assist" ? "from AI assist" : draft.origin === "manual" ? "typed by you" : "inserted";
 
   return `Draft ${from} · ${words} words`;
 }
