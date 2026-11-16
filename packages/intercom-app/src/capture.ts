@@ -5,9 +5,9 @@ import {
   type CaptureMessage,
   type ConversationSnapshot,
   DEFAULT_SETTINGS,
-  diffCaptureAnswers,
   type DraftOrigin,
   type DraftState,
+  diffCaptureAnswers,
   normalizeCaptureText,
   type PendingSend,
   REASON_PACKS,
@@ -121,7 +121,8 @@ export function createIntercomDraftDetector(opts: {
       }
 
       const grew = text.length - prev.text.length;
-      const jump = grew >= opts.minDraftChars && (prev.text.length < opts.minDraftChars / 2 || now - prev.at > window);
+      const jump =
+        grew >= opts.minDraftChars && (prev.text.length < opts.minDraftChars / 2 || now - prev.at > window);
       const first = firstSight && text.length >= opts.minDraftChars;
 
       if (jump || first) {
@@ -260,11 +261,7 @@ export function statusLine(
 
   const words = draft.wordCount || draft.text.trim().split(/\s+/).length;
   const originLabel =
-    draft.origin === "fin_assist"
-      ? "from Fin AI"
-      : draft.origin === "manual"
-      ? "typed by you"
-      : "inserted";
+    draft.origin === "fin_assist" ? "from Fin AI" : draft.origin === "manual" ? "typed by you" : "inserted";
 
   return `Draft ${originLabel} · ${words} words`;
 }
@@ -275,3 +272,5 @@ export function statusLine(
 export function quickReasons(settings: AppSettings) {
   return REASON_PACKS[settings.reasonPack];
 }
+
+export type { AppSettings, DraftState };

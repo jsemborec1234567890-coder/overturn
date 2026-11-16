@@ -8,11 +8,7 @@ import {
   statusLine,
   stripHtml,
 } from "./capture.js";
-import {
-  type ConversationSnapshot,
-  DEFAULT_SETTINGS,
-  type DraftState,
-} from "./types.js";
+import { type ConversationSnapshot, DEFAULT_SETTINGS, type DraftState } from "./types.js";
 
 const sampleConversation: ConversationSnapshot = {
   id: "774892",
@@ -50,7 +46,8 @@ describe("Intercom Capture Adapter Unit Suite", () => {
     expect(detector.current()).toBeNull();
 
     // 1a. Fin assist insertion
-    const finDraftText = "Hello Alice, I have reviewed your account and initiated a refund for the duplicate charge.";
+    const finDraftText =
+      "Hello Alice, I have reviewed your account and initiated a refund for the duplicate charge.";
     const detectedFin = detector.onComposer(finDraftText, true);
 
     expect(detectedFin).not.toBeNull();
