@@ -5,7 +5,6 @@ import {
   type CaptureMessage,
   type ConversationSnapshot,
   DEFAULT_SETTINGS,
-  type DraftOrigin,
   type DraftState,
   diffCaptureAnswers,
   normalizeCaptureText,
