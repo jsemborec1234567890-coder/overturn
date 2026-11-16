@@ -1,4 +1,4 @@
-import { defineConfig } from "tsup";
+﻿import { defineConfig } from "tsup";
 
 export default defineConfig({
   entry: {
@@ -8,6 +8,7 @@ export default defineConfig({
   format: ["esm"],
   platform: "neutral",
   target: "es2022",
+  splitting: false,
   dts: true,
   sourcemap: false,
   clean: true,
