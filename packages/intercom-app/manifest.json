@@ -1,0 +1,35 @@
+{
+  "name": "Overturn Capture for Intercom",
+  "version": "1.0.0",
+  "description": "Capture AI drafts, teammate corrections, and reasons in Intercom inbox for continuous evaluation",
+  "canvas_kit": {
+    "surfaces": ["inbox"]
+  },
+  "settings": [
+    {
+      "name": "overturn_api_key",
+      "type": "password",
+      "required": true,
+      "label": "Overturn API Key"
+    },
+    {
+      "name": "agent",
+      "type": "text",
+      "default": "support-reply",
+      "label": "Agent Name"
+    },
+    {
+      "name": "require_reason",
+      "type": "checkbox",
+      "default": true,
+      "label": "Require reason code on edited replies"
+    },
+    {
+      "name": "reason_pack",
+      "type": "select",
+      "options": ["support", "claims"],
+      "default": "support",
+      "label": "Reason Pack"
+    }
+  ]
+}
