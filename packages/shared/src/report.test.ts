@@ -82,7 +82,7 @@ function report(over: Partial<ReplayReport>): ReplayReport {
     passed: [],
     unreplayable: [],
     errors: [],
-    gate: { pass: true, reasons: [], newPathsBlock: true },
+    gate: { pass: true, reasons: [], newPathsBlock: true, moneyAtRiskCents: 0, currency: "usd" },
     ...over,
   };
 }
@@ -109,7 +109,13 @@ describe("narrative", () => {
       ],
       fixed: [row({ verdict: "fixed" }), row({ verdict: "fixed" })],
       stillWrong: [row({ verdict: "fail", passed: false })],
-      gate: { pass: false, reasons: ["1 regression"], newPathsBlock: true },
+      gate: {
+        pass: false,
+        reasons: ["1 regression"],
+        newPathsBlock: true,
+        moneyAtRiskCents: 0,
+        currency: "usd",
+      },
     });
     const lines = narrative(r);
     expect(lines[0]).toBe(

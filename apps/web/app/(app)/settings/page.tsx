@@ -1,5 +1,6 @@
 "use client";
 
+import { SETTINGS_MASK } from "@overturn-ai/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,10 @@ export default function SettingsPage() {
     retrainMinNewRows: string;
     retrainAgent: string;
     retrainShadowOnPass: boolean;
+    stripeWebhookSecret: string;
+    ryeWebhookSecret: string;
+    zincWebhookSecret: string;
+    maxUnitPriceCents: string;
   };
   const [form, setForm] = useState<Form | null>(null);
 
@@ -101,6 +106,13 @@ export default function SettingsPage() {
             agent: form!.retrainAgent.trim() || null,
             shadowOnPass: form!.retrainShadowOnPass,
           },
+          // A secret reads back as the mask; sending the mask back keeps it, "" clears it.
+          commerce: {
+            stripeWebhookSecret: form!.stripeWebhookSecret.trim() || null,
+            ryeWebhookSecret: form!.ryeWebhookSecret.trim() || null,
+            zincWebhookSecret: form!.zincWebhookSecret.trim() || null,
+            maxUnitPriceCents: form!.maxUnitPriceCents.trim() ? Number(form!.maxUnitPriceCents) : null,
+          },
         },
       }),
     onSuccess: () => {
@@ -129,6 +141,14 @@ export default function SettingsPage() {
           retrainMinNewRows: String(p.settings.retrain.minNewRows),
           retrainAgent: p.settings.retrain.agent ?? "",
           retrainShadowOnPass: p.settings.retrain.shadowOnPass,
+          stripeWebhookSecret: p.settings.commerce?.stripeWebhookSecret ?? "",
+          ryeWebhookSecret: p.settings.commerce?.ryeWebhookSecret ?? "",
+          zincWebhookSecret: p.settings.commerce?.zincWebhookSecret ?? "",
+          maxUnitPriceCents:
+            p.settings.commerce?.maxUnitPriceCents === null ||
+            p.settings.commerce?.maxUnitPriceCents === undefined
+              ? ""
+              : String(p.settings.commerce.maxUnitPriceCents),
         }
       : null);
 
@@ -403,6 +423,53 @@ export default function SettingsPage() {
                     (webhookTest.data.ok
                       ? " Test message sent."
                       : ` Test failed: ${webhookTest.data.error ?? `HTTP ${webhookTest.data.status}`}`)}
+                </p>
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label>Commerce</Label>
+                <p className="text-xs text-muted-foreground">
+                  Point each provider at{" "}
+                  <code className="text-[11px]">
+                    https://api.overturn.run/v1/commerce/webhooks/&lt;stripe|rye|zinc&gt;/{p?.id}
+                  </code>{" "}
+                  and paste its signing secret here. A refund or cancellation then becomes a correction, and
+                  its dollars show up on the Capture scorecard.
+                </p>
+              </div>
+              {(
+                [
+                  ["stripeWebhookSecret", "Stripe signing secret", "whsec_…"],
+                  ["ryeWebhookSecret", "Rye signing secret", ""],
+                  ["zincWebhookSecret", "Zinc signing secret", ""],
+                ] as const
+              ).map(([key, label, placeholder]) => (
+                <div className="space-y-1" key={key}>
+                  <Label>{label}</Label>
+                  <Input
+                    type="password"
+                    placeholder={placeholder}
+                    value={f[key] === SETTINGS_MASK ? "" : f[key]}
+                    onChange={(e) => setForm({ ...f, [key]: e.target.value })}
+                    data-testid={`commerce-${key}`}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {f[key] === SETTINGS_MASK
+                      ? "Set. Type to replace it; the value is never shown again."
+                      : "Not set. Events for this source are refused."}
+                  </p>
+                </div>
+              ))}
+              <div className="space-y-1">
+                <Label>Price ceiling (cents)</Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="no ceiling"
+                  value={f.maxUnitPriceCents}
+                  onChange={(e) => setForm({ ...f, maxUnitPriceCents: e.target.value })}
+                  data-testid="commerce-max-unit-price"
+                />
+                <p className="text-xs text-muted-foreground">
+                  A replayed purchase over this fails whatever it bought.
                 </p>
               </div>
               <div className="sm:col-span-2">

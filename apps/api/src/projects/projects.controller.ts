@@ -13,14 +13,14 @@ import type { Db } from "../db/client";
 import { DB } from "../db/db.module";
 import { type ProjectRow, projects } from "../db/schema";
 import { NotifyService } from "../notify/notify.service";
-import { parseSettings } from "./settings";
+import { maskSecrets, parseSettings, unmaskSecrets } from "./settings";
 
 export function serializeProject(p: ProjectRow): Project {
   return {
     id: p.id,
     name: p.name,
     slug: p.slug,
-    settings: parseSettings(p.settings),
+    settings: maskSecrets(parseSettings(p.settings)),
     createdAt: p.createdAt.toISOString(),
   };
 }
@@ -61,6 +61,7 @@ export class ProjectsController {
       ...incoming,
       retrain: { ...current.retrain, ...(incoming.retrain ?? {}) },
       capture: { ...current.capture, ...(incoming.capture ?? {}) },
+      commerce: unmaskSecrets({ ...current.commerce, ...(incoming.commerce ?? {}) }, current.commerce),
       export: { ...current.export, ...(incoming.export ?? {}) },
       privacy: { ...current.privacy, ...(incoming.privacy ?? {}) },
     });

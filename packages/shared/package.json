@@ -35,6 +35,11 @@
       "types": "./dist/capture.d.ts",
       "import": "./dist/capture.js",
       "require": "./dist/capture.cjs"
+    },
+    "./commerce": {
+      "types": "./dist/commerce.d.ts",
+      "import": "./dist/commerce.js",
+      "require": "./dist/commerce.cjs"
     }
   },
   "files": [

@@ -2,10 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # Agent branches test on push. A PR opened by github-actions[bot] has its
+    # workflows held for approval, so the required check never arrives and the
+    # PR cannot merge. Pushing the branch runs the same job on the same commit,
+    # which satisfies the check. Fork PRs are untouched and stay gated — this
+    # only ever fires for branches already inside the repo.
+    branches: [main, 'agent/**', 'chore/**', 'fix/sentry-*']
   pull_request:
-  # PRs opened by the agent workflows do not trigger CI on their own (GitHub does not start workflows for
-  # GITHUB_TOKEN events), so the agent dispatches this on its branch after opening the PR.
   workflow_dispatch:
 
 concurrency:

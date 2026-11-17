@@ -508,6 +508,9 @@ describe("replay jobs (step mode)", () => {
       pass: false,
       reasons: ["1 new path not yet accepted"],
       newPathsBlock: true,
+      // No case here carried money, so the commerce pack's figure is zero.
+      moneyAtRiskCents: 0,
+      currency: "usd",
     });
     const md = await fetch(`${ctx.baseUrl}/v1/replays/${jobId}/report.md`, {
       headers: { authorization: `Bearer ${ctx.apiKey}` },

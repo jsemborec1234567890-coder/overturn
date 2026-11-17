@@ -43,6 +43,9 @@ inputs:
     description: "Fail the check when regressions exceed this number"
     required: false
     default: "0"
+  max-money-at-risk:
+    description: "Spend a budget instead of counting: fail only when the regressions' past refunds exceed this many cents (commerce pack). Set, it replaces fail-on-regression; empty, any regression over fail-on-regression fails."
+    required: false
   allow-new-paths:
     description: "Do not fail the check on new paths (tool calls with no recording); default follows the project setting"
     required: false
@@ -77,6 +80,9 @@ outputs:
   report-path:
     description: "Path of the markdown report"
     value: ${{ steps.replay.outputs.report }}
+  money-at-risk:
+    description: "What the regressions cost the last time they happened, in cents (commerce pack)"
+    value: ${{ steps.replay.outputs.money_at_risk }}
 
 runs:
   using: "composite"
@@ -106,14 +112,22 @@ runs:
           REGRESSIONS=$(node -e "const r=require(process.argv[1]);console.log(r.regressions.length)" "$JSON")
           NEW_PATHS=$(node -e "const r=require(process.argv[1]);console.log((r.newPaths||[]).length)" "$JSON")
           NEW_PATHS_BLOCK=$(node -e "const r=require(process.argv[1]);console.log(r.gate?r.gate.newPathsBlock:true)" "$JSON")
+          MONEY=$(node -e "const r=require(process.argv[1]);console.log(r.gate&&r.gate.moneyAtRiskCents?r.gate.moneyAtRiskCents:0)" "$JSON")
           ${{ inputs.cli-command }} report "$JOB_ID" --format md --output "$REPORT" >/dev/null
           echo "job_id=$JOB_ID" >> "$GITHUB_OUTPUT"
           echo "regressions=$REGRESSIONS" >> "$GITHUB_OUTPUT"
           echo "new_paths=$NEW_PATHS" >> "$GITHUB_OUTPUT"
+          echo "money_at_risk=$MONEY" >> "$GITHUB_OUTPUT"
           echo "report=$REPORT" >> "$GITHUB_OUTPUT"
           cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
           FAILED=false
-          [ "$REGRESSIONS" -gt "${{ inputs.fail-on-regression }}" ] && FAILED=true
+          # A money budget and a regression count are two ways to say the same thing, so a repo
+          # that sets the budget is judged on the budget alone — otherwise it could never spend it.
+          if [ -n "${{ inputs.max-money-at-risk }}" ]; then
+            [ "$MONEY" -gt "${{ inputs.max-money-at-risk }}" ] && FAILED=true
+          else
+            [ "$REGRESSIONS" -gt "${{ inputs.fail-on-regression }}" ] && FAILED=true
+          fi
           if [ "$NEW_PATHS" -gt 0 ] && [ "${{ inputs.allow-new-paths }}" != "true" ] && [ "$NEW_PATHS_BLOCK" = "true" ]; then FAILED=true; fi
           echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
         else
@@ -157,5 +171,10 @@ runs:
       if: ${{ steps.replay.outputs.failed == 'true' }}
       shell: bash
       run: |
-        echo "::error::Overturn: ${{ steps.replay.outputs.regressions }} regression(s) (limit ${{ inputs.fail-on-regression }}), ${{ steps.replay.outputs.new_paths }} new path(s) not yet accepted"
+        LIMIT="${{ inputs.max-money-at-risk }}"
+        if [ -n "$LIMIT" ]; then
+          echo "::error::Overturn: \$$(( ${{ steps.replay.outputs.money_at_risk }} / 100 )) of past refunds would happen again (budget \$$(( LIMIT / 100 ))), across ${{ steps.replay.outputs.regressions }} regression(s); ${{ steps.replay.outputs.new_paths }} new path(s) not yet accepted"
+        else
+          echo "::error::Overturn: ${{ steps.replay.outputs.regressions }} regression(s) (limit ${{ inputs.fail-on-regression }}), ${{ steps.replay.outputs.new_paths }} new path(s) not yet accepted"
+        fi
         exit 1

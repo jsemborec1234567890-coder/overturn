@@ -1,12 +1,14 @@
-import { Body, Controller, Get, HttpCode, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import {
   type Correction,
+  type CorrectionAttribute,
   type CorrectionCreate,
   type CorrectionResult,
+  correctionAttributeSchema,
   correctionCreateSchema,
   correctionListQuerySchema,
 } from "@overturn-ai/shared";
-import type { z } from "zod";
+import { z } from "zod";
 import { ApiKeyGuard, Auth } from "../auth/api-key.guard";
 import type { AuthContext } from "../auth/api-keys.service";
 import { zod } from "../common/zod.pipe";
@@ -30,6 +32,20 @@ export class CorrectionsController {
       actor,
       source: auth.user ? "ui" : body.source,
     });
+  }
+
+  /**
+   * Who was at fault for a captured refund. A webhook has no human on it, so a commerce correction
+   * arrives unattributed and its case sits out of the suite until this says the agent was wrong.
+   */
+  @Patch(":id/attribution")
+  attribute(
+    @Auth() auth: AuthContext,
+    @Param("id", zod(z.uuid())) id: string,
+    @Body(zod(correctionAttributeSchema)) body: CorrectionAttribute,
+  ): Promise<Correction> {
+    const actor = body.actor ?? auth.user?.email ?? null;
+    return this.corrections.attribute(auth.projectId, id, { ...body, actor });
   }
 
   @Get()

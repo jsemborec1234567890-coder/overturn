@@ -1,5 +1,6 @@
 export * from "./capture.js";
 export * from "./cases.js";
+export * from "./commerce.js";
 export * from "./contract.js";
 export * from "./fingerprint.js";
 export * from "./pricing.js";

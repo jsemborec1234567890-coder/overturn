@@ -14,7 +14,7 @@ import {
   renderCaptureContext,
   SUITE_EXCLUDED_REASON_CODES,
 } from "@overturn-ai/shared";
-import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, notInArray, sql } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
 import { CorrectionsService } from "../corrections/corrections.service";
 import type { Db } from "../db/client";
@@ -52,8 +52,11 @@ export class CaptureService {
       note: input.reason ?? null,
       reasonCode: input.reasonCode ?? null,
       secondsToSend: input.secondsToSend ?? null,
+      amountCents: input.amountCents ?? null,
+      currency: input.currency ?? null,
       actor: input.actor ?? null,
       source: "capture",
+      ...(input.scorer ? { scorer: input.scorer, scorerConfig: input.scorerConfig ?? {} } : {}),
     });
 
     return {
@@ -157,6 +160,57 @@ export class CaptureService {
       .where(and(...base))
       .groupBy(sql`${DRAFT_ORIGIN}`)
       .orderBy(sql`${DRAFT_ORIGIN}`);
+    // What the mistakes cost, and which model version they came from. Only corrections that
+    // carried money count, so a team that never sets an amount sees zeros rather than a guess.
+    const money = sql<number>`coalesce(sum(${corrections.amountCents}), 0)::int`;
+    const priced = sql<number>`count(*) filter (where ${corrections.amountCents} is not null)::int`;
+    // "Lost to agent errors" has to mean a person said the agent was wrong. A refund nobody has
+    // attributed is money that moved, and counting it here would make the headline a sales figure.
+    const attributedOnly = and(
+      isNotNull(corrections.reasonCode),
+      notInArray(corrections.reasonCode, [...SUITE_EXCLUDED_REASON_CODES]),
+    );
+    const attributed = sql<number>`coalesce(sum(${corrections.amountCents}) filter (where ${attributedOnly}), 0)::int`;
+    const pendingMoney = sql<number>`coalesce(sum(${corrections.amountCents}) filter (where not (${attributedOnly})), 0)::int`;
+    const pendingCount = sql<number>`count(*) filter (where ${corrections.amountCents} is not null and not (${attributedOnly}))::int`;
+    const [totalCost] = await this.db
+      .select({
+        amountCents: money,
+        attributedCents: attributed,
+        pendingCents: pendingMoney,
+        pending: pendingCount,
+        priced,
+        currency: sql<string | null>`min(${corrections.currency})`,
+      })
+      .from(corrections)
+      .innerJoin(runs, eq(runs.id, corrections.runId))
+      .where(and(...where));
+    const modelOf = sql<string>`coalesce(${steps.model}, 'unknown')`;
+    const byModelRows = await this.db
+      .select({
+        model: modelOf,
+        agentVersion: runs.agentVersion,
+        captures: count,
+        edited,
+        amountCents: money,
+        attributedCents: attributed,
+      })
+      .from(corrections)
+      .innerJoin(runs, eq(runs.id, corrections.runId))
+      .leftJoin(steps, eq(steps.id, corrections.stepId))
+      .where(and(...where))
+      .groupBy(modelOf, runs.agentVersion)
+      .orderBy(desc(attributed), desc(money), desc(count))
+      .limit(20);
+    const cost = {
+      amountCents: totalCost?.amountCents ?? 0,
+      attributedCents: totalCost?.attributedCents ?? 0,
+      pendingCents: totalCost?.pendingCents ?? 0,
+      pending: totalCost?.pending ?? 0,
+      currency: totalCost?.currency ?? "usd",
+      priced: totalCost?.priced ?? 0,
+      byModel: byModelRows.map((r) => ({ ...r, agentVersion: r.agentVersion ?? null })),
+    };
     const byAgent = await this.db
       .select({ agent: runs.agent, captures: count, edited })
       .from(corrections)
@@ -185,6 +239,7 @@ export class CaptureService {
       edited: editedN,
       untouchedRate: rate(captures, editedN),
       experts: totals?.experts ?? 0,
+      cost,
       byExpert,
       timeToSend,
       byReason,
