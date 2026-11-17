@@ -127,7 +127,7 @@ The repositioning: Overturn is the system of record for how a company corrects A
 - [x] SDKs: `ov.capture()` (TS, Python); CLI: `overturn capture`; `GET /v1/runs?externalId=`
 - [x] Zendesk app (`packages/zendesk-app`): ticket sidebar, draft detection (inserted / preloaded / recorded / marked), diff on submit, reason with quick picks, optional require-reason, custom fields as decision fields, secure API key
 - [x] Web: Zendesk as the first onboarding tab (no code); captured runs link back to the ticket
-- [ ] Front plugin, Salesforce Service Cloud (Lightning) component, Gmail add-on: same `/v1/capture`, same sidebar logic
+- [x] Front plugin (`packages/front-plugin`): same `/v1/capture`, same sidebar logic with held reason for Front's no-veto send; Salesforce Service Cloud (Lightning) component, Gmail add-on next
 - [x] Capture scorecard (`GET /v1/capture/stats`, web **Capture**): sent untouched vs edited, by expert, top reasons, by source, by week
 - [x] Claims pack: default agent names, decision fields (coverage, reserve, denial reason), quick-pick reasons, a demo tenant with 30 captured corrections (`examples/claims-pack`)
 - [x] Hosted demo project on app.overturn.run, seeded from `examples/claims-pack` (claims-demo project on app.overturn.run, seeded 2026-11-07)

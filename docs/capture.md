@@ -21,7 +21,7 @@ What the agent sees:
 
 Overturn failing never blocks the send. The run page links back to the ticket.
 
-Source: [`packages/zendesk-app`](https://github.com/overturn-ai/overturn/tree/main/packages/zendesk-app). Front, Salesforce Service Cloud and Gmail follow the same shape.
+Source: [`packages/zendesk-app`](https://github.com/overturn-ai/overturn/tree/main/packages/zendesk-app) and [`packages/front-plugin`](https://github.com/overturn-ai/overturn/tree/main/packages/front-plugin). Salesforce Service Cloud and Gmail follow the same shape.
 
 ## Any other tool: `POST /v1/capture`
 
