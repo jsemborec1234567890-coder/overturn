@@ -1,5 +1,6 @@
 "use client";
 
+import { formatMoney } from "@overturn-ai/shared";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
@@ -66,6 +67,14 @@ export default function CapturePage() {
         ``,
         `Sent untouched: ${pct(s.untouchedRate)} (${s.untouched} of ${s.captures})`,
         `Fixes kept: ${s.edited}`,
+        ...(s.cost.attributedCents > 0
+          ? [`Lost to agent errors: ${formatMoney(s.cost.attributedCents, s.cost.currency)}`]
+          : []),
+        ...(s.cost.pendingCents > 0
+          ? [
+              `Refunds awaiting attribution: ${formatMoney(s.cost.pendingCents, s.cost.currency)} (${s.cost.pending})`,
+            ]
+          : []),
         `Reviewers capturing: ${s.experts}`,
         ``,
         ...(s.byReason.length
@@ -212,6 +221,61 @@ export default function CapturePage() {
           </CardContent>
         </Card>
       </div>
+
+      {s && (s.cost.attributedCents > 0 || s.cost.pendingCents > 0) ? (
+        <Card>
+          <CardHeader>
+            <CardDescription>Dollars lost to agent errors, by model version</CardDescription>
+            <CardTitle className="font-mono text-3xl font-normal tabular-nums" data-testid="cost-total">
+              {formatMoney(s.cost.attributedCents, s.cost.currency)}
+            </CardTitle>
+            {s.cost.pendingCents > 0 ? (
+              <p className="text-xs text-muted-foreground" data-testid="cost-pending">
+                {formatMoney(s.cost.pendingCents, s.cost.currency)} across {s.cost.pending} refund
+                {s.cost.pending === 1 ? "" : "s"} nobody has attributed yet — not counted above, and not
+                replayed.
+              </p>
+            ) : null}
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <THead>
+                <TR>
+                  <TH>Model</TH>
+                  <TH>Prompt</TH>
+                  <TH className="text-right">Captured</TH>
+                  <TH className="text-right">Wrong</TH>
+                  <TH className="text-right">Refunded</TH>
+                  <TH className="text-right">Agent's fault</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {s.cost.byModel
+                  .filter((m) => m.amountCents > 0)
+                  .map((m) => (
+                    <TR key={`${m.model}:${m.agentVersion ?? ""}`}>
+                      <TD className="font-mono text-xs">{m.model}</TD>
+                      <TD className="font-mono text-xs text-muted-foreground">{m.agentVersion ?? "—"}</TD>
+                      <TD className="text-right tabular-nums">{m.captures}</TD>
+                      <TD className="text-right tabular-nums">{m.edited}</TD>
+                      <TD className="text-right tabular-nums text-muted-foreground">
+                        {formatMoney(m.amountCents, s.cost.currency)}
+                      </TD>
+                      <TD className="text-right tabular-nums">
+                        {formatMoney(m.attributedCents, s.cost.currency)}
+                      </TD>
+                    </TR>
+                  ))}
+              </TBody>
+            </Table>
+            <p className="px-4 py-2 text-xs text-muted-foreground">
+              Refunds, disputes and cancellations the commerce pack captured, against the model version that
+              made the purchase. Most refunds are not agent errors, so only the ones a person has attributed
+              to the agent count in the headline and get replayed by the gate.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {s && s.captures === 0 ? (
         <Card>

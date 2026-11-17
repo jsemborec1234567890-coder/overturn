@@ -1,4 +1,5 @@
 import { decisionFields } from "./cases.js";
+import { formatMoney } from "./commerce.js";
 import type { ReplayMatrix, ReplayReport, ReportRow } from "./schemas.js";
 
 function fmt(v: unknown, max = 400): string {
@@ -152,7 +153,13 @@ function section(title: string, rows: ReportRow[], emptyText: string): string[] 
     out.push(`_${emptyText}_`, "");
     return out;
   }
-  out.push("| Case | Kind | Baseline | Target | Human correction | Why |", "|---|---|---|---|---|---|");
+  const priced = rows.some((r) => (r.amountCents ?? 0) > 0);
+  out.push(
+    priced
+      ? "| Case | Kind | Cost last time | Baseline | Target | Human correction | Why |"
+      : "| Case | Kind | Baseline | Target | Human correction | Why |",
+    priced ? "|---|---|---|---|---|---|---|" : "|---|---|---|---|---|---|",
+  );
   for (const r of rows) {
     const human =
       r.kind === "edit" ? r.expected : r.kind === "approve" ? "approved as-is" : (r.note ?? r.kind);
@@ -162,8 +169,9 @@ function section(title: string, rows: ReportRow[], emptyText: string): string[] 
     const steps = r.stepCount !== undefined ? ` · ${r.stepCount} steps` : "";
     const contract = r.contractViolations?.length ? ` · contract: ${r.contractViolations.join("; ")}` : "";
     const latency = r.latencyMs != null ? ` · ${Math.round(r.latencyMs)} ms` : "";
+    const cost = priced ? ` ${r.amountCents ? formatMoney(r.amountCents, r.currency ?? "usd") : "—"} |` : "";
     out.push(
-      `| ${cell(r.title, 60)} | ${r.kind} | ${cell(r.baselineOutput)} | ${cell(r.error ?? r.targetOutput)} | ${cell(human)} | ${cell(r.reason, 120)}${contract}${steps}${refused}${latency} |`,
+      `| ${cell(r.title, 60)} | ${r.kind} |${cost} ${cell(r.baselineOutput)} | ${cell(r.error ?? r.targetOutput)} | ${cell(human)} | ${cell(r.reason, 120)}${contract}${steps}${refused}${latency} |`,
     );
   }
   out.push("");
@@ -194,6 +202,9 @@ export function renderMarkdownReport(
     `**${summary.completed}/${summary.cases} cases** · pass rate **${pct(summary.passRate)}** · ${verdictBits || "no verdicts"} · cost ${money(summary.costUsd)} · ${summary.durationMs != null ? `${(summary.durationMs / 1000).toFixed(1)}s` : "—"} · baseline: ${baseline}${summary.stoppedByCostCap ? " · **stopped by --max-cost**" : ""}`,
     "",
   );
+  if (report.gate && !report.gate.pass) {
+    lines.push(`> **Gate: red** — ${report.gate.reasons.join("; ")}.`, "");
+  }
   const story = narrative(report);
   if (story.length > 0) lines.push("**What changed**", "", ...story.map((l) => `- ${l}`), "");
   lines.push(...section("Regressions", report.regressions, "No regressions."));

@@ -5,6 +5,7 @@ import {
   estimateCostUsd,
   evaluateContract,
   type FrozenInput,
+  formatMoney,
   hashJSON,
   type JudgeVerdict,
   parseJsonText,
@@ -1017,12 +1018,19 @@ export class ReplayService {
   async report(projectId: string, jobId: string): Promise<ReplayReport> {
     const job = await this.get(projectId, jobId);
     const rows = await this.db
-      .select({ r: replayResults, c: cases, note: corrections.note, actor: corrections.actor })
+      .select({
+        r: replayResults,
+        c: cases,
+        note: corrections.note,
+        actor: corrections.actor,
+        amountCents: corrections.amountCents,
+        currency: corrections.currency,
+      })
       .from(replayResults)
       .innerJoin(cases, eq(cases.id, replayResults.caseId))
       .innerJoin(corrections, eq(corrections.id, cases.correctionId))
       .where(eq(replayResults.jobId, jobId));
-    const toRow = ({ r, c, note, actor }: (typeof rows)[number]): ReportRow => ({
+    const toRow = ({ r, c, note, actor, amountCents, currency }: (typeof rows)[number]): ReportRow => ({
       caseId: c.id,
       title: c.title,
       kind: c.kind,
@@ -1041,6 +1049,8 @@ export class ReplayService {
       error: r.error,
       costUsd: r.costUsd,
       latencyMs: r.latencyMs,
+      amountCents,
+      currency,
       ...trajectoryExtras(r.diff),
     });
     const all = rows.map(toRow).sort((a, b) => a.title.localeCompare(b.title));
@@ -1126,12 +1136,22 @@ export function scorecardFor(jobs: ReplayJob[], recordedModel: string | null): S
 /** The CI verdict: regressions always block; new paths block until accepted unless the project says otherwise. */
 export function gateFor(rows: ReportRow[], newPathsBlock: boolean): NonNullable<ReplayReport["gate"]> {
   const reasons: string[] = [];
-  const regressions = rows.filter((r) => r.verdict === "regression").length;
+  const regressed = rows.filter((r) => r.verdict === "regression");
   const newPaths = rows.filter((r) => r.verdict === "new_path").length;
-  if (regressions > 0) reasons.push(`${regressions} regression${regressions === 1 ? "" : "s"}`);
+  // What those regressions cost the last time they happened: the commerce pack's reason to block.
+  const moneyAtRiskCents = regressed.reduce((n, r) => n + (r.amountCents ?? 0), 0);
+  const currency = regressed.find((r) => r.currency)?.currency ?? "usd";
+  if (regressed.length > 0)
+    reasons.push(
+      `${regressed.length} regression${regressed.length === 1 ? "" : "s"}${
+        moneyAtRiskCents > 0
+          ? ` (${formatMoney(moneyAtRiskCents, currency)} of past refunds would happen again)`
+          : ""
+      }`,
+    );
   if (newPaths > 0 && newPathsBlock)
     reasons.push(`${newPaths} new path${newPaths === 1 ? "" : "s"} not yet accepted`);
-  return { pass: reasons.length === 0, reasons, newPathsBlock };
+  return { pass: reasons.length === 0, reasons, newPathsBlock, moneyAtRiskCents, currency };
 }
 
 /** Report columns that only exist for trajectory replays (see POST /v1/replays/:id/results). */

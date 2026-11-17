@@ -5,6 +5,7 @@ import { v7 as uuidv7 } from "uuid";
 import type { Db } from "../db/client";
 import { DB } from "../db/db.module";
 import { apiKeys, organizations, projects } from "../db/schema";
+import { withoutSecrets } from "./secrets";
 
 const ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 export const KEY_PREFIX = "ov_live_";
@@ -104,7 +105,7 @@ export class ApiKeysService {
       keyId: row.keyId,
       keyPrefix: row.keyPrefix,
       keyName: row.keyName,
-      settings: (row.settings ?? {}) as Record<string, unknown>,
+      settings: withoutSecrets(row.settings),
     };
   }
 }

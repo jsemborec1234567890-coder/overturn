@@ -16,6 +16,7 @@ import { DB } from "../db/db.module";
 import { magicLinks, memberships, organizations, projects, sessions, users } from "../db/schema";
 import { slugify } from "../scripts/bootstrap";
 import type { AuthContext } from "./api-keys.service";
+import { withoutSecrets } from "./secrets";
 
 export const SESSION_COOKIE = "ov_session";
 const MAGIC_LINK_TTL_MS = 15 * 60_000;
@@ -211,7 +212,7 @@ export class AuthService {
       projectSlug: project.slug,
       keyId: `session:${user.id}`,
       keyPrefix: "session",
-      settings: (row?.settings ?? {}) as Record<string, unknown>,
+      settings: withoutSecrets(row?.settings),
       user,
     };
   }

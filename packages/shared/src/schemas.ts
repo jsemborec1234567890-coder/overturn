@@ -36,6 +36,7 @@ export const scorerNameSchema = z.enum([
   "judge",
   "not_equals",
   "should_escalate",
+  "purchase_decision",
 ]);
 export type ScorerName = z.infer<typeof scorerNameSchema>;
 
@@ -256,6 +257,23 @@ export const privacySettingsSchema = z.object({
 });
 export type PrivacySettings = z.infer<typeof privacySettingsSchema>;
 
+/**
+ * The commerce pack. The three secrets verify provider webhooks, so they are write-only at the
+ * API boundary: a read returns `settingsMask` when one is set, and writing the mask back keeps
+ * the stored value. Anything else in here is ordinary configuration.
+ */
+export const commerceSettingsSchema = z.object({
+  stripeWebhookSecret: z.string().max(400).nullable().default(null),
+  ryeWebhookSecret: z.string().max(400).nullable().default(null),
+  zincWebhookSecret: z.string().max(400).nullable().default(null),
+  /** A replayed purchase over this ceiling fails, whatever it bought. Null = no ceiling. */
+  maxUnitPriceCents: z.number().int().min(0).max(1_000_000_000).nullable().default(null),
+});
+export type CommerceSettings = z.infer<typeof commerceSettingsSchema>;
+
+/** What a read of a write-only setting returns in place of the secret. */
+export const SETTINGS_MASK = "__set__";
+
 export const projectSettingsSchema = z.object({
   defaultScorer: scorerNameSchema.nullable().default(null),
   judgeModel: z.string().default("openai/gpt-4.1-mini"),
@@ -271,6 +289,7 @@ export const projectSettingsSchema = z.object({
   /** Opt-in continuous retraining: once enough new corrections pile up, train, gate, shadow, notify. Never promotes. */
   retrain: retrainSettingsSchema.default(retrainSettingsSchema.parse({})),
   capture: captureSettingsSchema.default(captureSettingsSchema.parse({})),
+  commerce: commerceSettingsSchema.default(commerceSettingsSchema.parse({})),
   export: exportSettingsSchema.default(exportSettingsSchema.parse({})),
   privacy: privacySettingsSchema.default(privacySettingsSchema.parse({})),
 });
@@ -389,6 +408,12 @@ export const correctionCreateSchema = z.object({
   reasonCode: reasonCodeSchema.nullish(),
   /** Set by capture: seconds the draft sat in front of the expert before the send. */
   secondsToSend: z.number().min(0).nullish(),
+  /**
+   * What this mistake cost, in the smallest unit of the currency (the commerce pack sets it from
+   * the refund). The scorecard sums it per model, so it is money lost, never a price.
+   */
+  amountCents: z.number().int().min(0).max(1_000_000_000).nullish(),
+  currency: z.string().length(3).toLowerCase().nullish(),
   actor: z.string().max(200).nullish(),
   source: correctionSourceSchema.default("api"),
   /** Override the scorer the case gets; omitted = chosen from the shape of the expected answer. */
@@ -408,11 +433,25 @@ export const correctionSchema = z.object({
   correctedOutput: jsonValueSchema.nullable(),
   note: z.string().nullable(),
   reasonCode: z.string().nullable(),
+  /** What the mistake cost, in minor units, when the correction carried money. */
+  amountCents: z.number().int().nullable(),
+  currency: z.string().nullable(),
   actor: z.string().nullable(),
   source: correctionSourceSchema,
   createdAt: isoDateSchema,
 });
 export type Correction = z.infer<typeof correctionSchema>;
+
+/**
+ * A person saying who was at fault for a captured refund. Until this lands, a commerce correction
+ * is a record of money, not a regression test: the case stays out of the suite and the gate.
+ */
+export const correctionAttributeSchema = z.object({
+  reasonCode: z.string().min(1).max(100),
+  note: z.string().min(1).max(2000),
+  actor: z.string().max(200).optional(),
+});
+export type CorrectionAttribute = z.infer<typeof correctionAttributeSchema>;
 
 export const correctionListQuerySchema = z.object({
   runId: uuidSchema.optional(),
@@ -586,7 +625,17 @@ export const correctionResultSchema = z.object({
 
 // ---------- capture: draft vs sent, where the expert already works ----------
 
-export const captureSourceSchema = z.enum(["zendesk", "front", "intercom", "gmail", "salesforce", "custom"]);
+export const captureSourceSchema = z.enum([
+  "zendesk",
+  "front",
+  "intercom",
+  "gmail",
+  "salesforce",
+  "stripe",
+  "rye",
+  "zinc",
+  "custom",
+]);
 export type CaptureSource = z.infer<typeof captureSourceSchema>;
 
 /** One message of the conversation the expert saw when they answered. */
@@ -634,6 +683,12 @@ export const captureCreateSchema = z.object({
     .min(0)
     .max(86_400 * 30)
     .nullish(),
+  /** What the mistake cost, in minor units; the commerce pack sets it from the refund. */
+  amountCents: z.number().int().min(0).max(1_000_000_000).nullish(),
+  currency: z.string().length(3).toLowerCase().nullish(),
+  /** Override the scorer for the case this capture creates; omitted = chosen from the answer's shape. */
+  scorer: scorerNameSchema.optional(),
+  scorerConfig: z.record(z.string(), jsonValueSchema).optional(),
   /** Which model wrote the draft, when known. */
   draftModel: z.string().max(200).nullish(),
   draftProvider: z.string().max(100).nullish(),
@@ -687,6 +742,32 @@ export const captureStatsSchema = z.object({
   edited: z.number().int(),
   untouchedRate: z.number(),
   experts: z.number().int(),
+  /**
+   * What the corrections in this window cost, in minor units, and the per-model split. Only
+   * corrections that carried money count, so a team that never sets an amount sees zeros.
+   */
+  cost: z.object({
+    /** Every refund captured, attributed or not. Money that moved, not money the agent lost. */
+    amountCents: z.number().int(),
+    /** The headline: refunds a human has attributed to the agent. The rest is not yet evidence. */
+    attributedCents: z.number().int(),
+    /** Captured, waiting for someone to say whether the agent was at fault. */
+    pendingCents: z.number().int(),
+    pending: z.number().int(),
+    currency: z.string(),
+    priced: z.number().int(),
+    /** Dollars lost per model version: the headline of the commerce scorecard. */
+    byModel: z.array(
+      z.object({
+        model: z.string(),
+        agentVersion: z.string().nullable(),
+        captures: z.number().int(),
+        edited: z.number().int(),
+        amountCents: z.number().int(),
+        attributedCents: z.number().int(),
+      }),
+    ),
+  }),
   /**
    * Credit, not a score: corrections kept per expert. Empty unless `settings.capture.showByExpert`
    * is on. Never carries a rate or a time; the stats service enforces that.
@@ -944,6 +1025,9 @@ export const reportRowSchema = z.object({
   error: z.string().nullable(),
   costUsd: z.number().nullable(),
   latencyMs: z.number().nullable(),
+  /** What the human correction behind this case cost, in minor units (the commerce pack sets it). */
+  amountCents: z.number().int().nullable().optional(),
+  currency: z.string().nullable().optional(),
   /** Trajectory mode: side-effect tools the agent tried to call; refused, never executed. */
   refusedSideEffects: z.array(z.object({ toolName: z.string(), args: jsonValueSchema })).optional(),
   /** Trajectory mode: steps the agent took while replaying. */
@@ -981,6 +1065,12 @@ export const replayReportSchema = z.object({
       pass: z.boolean(),
       reasons: z.array(z.string()),
       newPathsBlock: z.boolean(),
+      /**
+       * What the regressions in this replay already cost once, in minor units: the sum of the
+       * refunds behind the cases that stopped passing. Zero when no case carried money.
+       */
+      moneyAtRiskCents: z.number().int().default(0),
+      currency: z.string().default("usd"),
     })
     .optional(),
 });

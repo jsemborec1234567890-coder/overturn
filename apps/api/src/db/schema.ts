@@ -229,6 +229,9 @@ export const corrections = pgTable(
     reasonCode: text("reason_code"),
     /** Capture only: seconds between the draft appearing and the send. Never joined to actor in any read path. */
     secondsToSend: real("seconds_to_send"),
+    /** What the mistake cost, in minor units; the commerce pack sets it from the refund. */
+    amountCents: integer("amount_cents"),
+    currency: text("currency"),
     actor: text("actor"),
     source: correctionSource("source").notNull(),
     ...timestamps,
@@ -495,6 +498,24 @@ export const sessions = pgTable("sessions", {
   expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
   ...timestamps,
 });
+
+/**
+ * Provider webhook deliveries we have already acted on. Stripe and the order APIs retry, and a
+ * retry must not become a second correction; the provider's own event id is the key.
+ */
+export const webhookEvents = pgTable(
+  "webhook_events",
+  {
+    id: text("id").primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    source: text("source").notNull(),
+    correctionId: uuid("correction_id"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("webhook_events_project_created").on(t.projectId, t.createdAt)],
+);
 
 export type RunRow = typeof runs.$inferSelect;
 export type StepRow = typeof steps.$inferSelect;

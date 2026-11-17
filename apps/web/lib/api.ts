@@ -125,6 +125,9 @@ export const client = {
     create: (body: Omit<CorrectionCreate, "source">) =>
       api<CorrectionResult>("POST", "/v1/corrections", { ...body, source: "ui" }),
     list: (runId: string) => api<Correction[]>("GET", "/v1/corrections", undefined, { runId }),
+    /** Say who was at fault for a captured refund; a commerce case joins the suite only after this. */
+    attribute: (id: string, body: { reasonCode: string; note: string }) =>
+      api<Correction>("PATCH", `/v1/corrections/${id}/attribution`, body),
     captureStats: (q: { days?: number; agent?: string; origin?: "all" | "ai" | "manual" | "unknown" }) =>
       api<CaptureStats>("GET", "/v1/capture/stats", undefined, q),
   },

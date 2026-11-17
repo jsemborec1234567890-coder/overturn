@@ -1,11 +1,12 @@
 import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { projectSettingsSchema } from "@overturn-ai/shared";
+import { lt } from "drizzle-orm";
 import PgBoss from "pg-boss";
 import { APP_CONFIG, type AppConfig } from "../config";
 import { CorrectionsService } from "../corrections/corrections.service";
 import type { Db } from "../db/client";
 import { DB } from "../db/db.module";
-import { projects } from "../db/schema";
+import { projects, webhookEvents } from "../db/schema";
 import { ReplayService } from "../replay/replay.service";
 import { RunsService } from "../runs/runs.service";
 import { TrainingService } from "../training/training.service";
@@ -14,6 +15,11 @@ export const IMPLICIT_APPROVE_JOB = "implicit-approve";
 export const REPLAY_JOB = "replay";
 export const CACHE_PURGE_JOB = "cache-purge";
 export const RETENTION_JOB = "retention";
+/**
+ * How long a handled provider event id is remembered. Providers retry for days, not months, so
+ * this is long enough to catch every retry and short enough that the table stays small.
+ */
+export const WEBHOOK_EVENT_RETENTION_DAYS = 45;
 export const TRAIN_JOB = "train";
 export const TRAIN_POLL_JOB = "train-poll";
 export const SHADOW_JOB = "shadow";
@@ -158,7 +164,12 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
       const days = parsed.success ? parsed.data.retentionDays : 90;
       total += await this.runs.purgeExpired(p.id, days);
     }
-    if (total > 0) this.logger.log(`retention deleted ${total} runs`);
+    const events = await this.db
+      .delete(webhookEvents)
+      .where(lt(webhookEvents.createdAt, new Date(Date.now() - WEBHOOK_EVENT_RETENTION_DAYS * 86_400_000)))
+      .returning({ id: webhookEvents.id });
+    if (total > 0 || events.length > 0)
+      this.logger.log(`retention deleted ${total} runs and ${events.length} webhook events`);
     return total;
   }
 

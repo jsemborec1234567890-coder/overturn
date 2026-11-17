@@ -19,6 +19,7 @@ export default defineConfig({
         { label: "Overview", link: "/" },
         { label: "Quickstart", link: "/quickstart/" },
         { label: "Capture: Zendesk & API", link: "/capture/" },
+        { label: "Commerce: refunds as tests", link: "/commerce/" },
         { label: "Hosted app", link: "/hosted/" },
         { label: "SDK & CLI", link: "/sdk/" },
         { label: "Corrections from your UI", link: "/correct-button/" },

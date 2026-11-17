@@ -1,12 +1,17 @@
-import type {
-  CaptureCreate,
-  CaptureResult,
-  Contract,
-  CorrectionKind,
-  CorrectionResult,
-  ExamplesResponse,
-  RunUpsert,
-  StepUpsert,
+import { randomUUID } from "node:crypto";
+import {
+  type CaptureCreate,
+  type CaptureResult,
+  type Contract,
+  type CorrectionKind,
+  type CorrectionResult,
+  type ExamplesResponse,
+  type PurchaseDecision,
+  type PurchaseSnapshot,
+  purchaseSystemPrompt,
+  type RunUpsert,
+  renderPurchaseSnapshot,
+  type StepUpsert,
 } from "@overturn-ai/shared";
 import { aiMiddleware } from "./ai-sdk.js";
 import { type AnthropicLike, wrapAnthropic } from "./anthropic.js";
@@ -152,6 +157,86 @@ export class Overturn implements RunSink {
    */
   capture(input: CaptureCreate): Promise<CaptureResult> {
     return this.api.corrections.capture(input);
+  }
+
+  /**
+   * The commerce pack. Record a purchase decision with exactly what the agent saw, so a refund,
+   * dispute or cancelled order can later become a regression test: the webhook finds this run by
+   * its id or externalId, and the replay re-runs this snapshot.
+   *
+   * Put the ids it returns on the payment so the provider hands them back:
+   * `stripe.paymentIntents.create({ ..., metadata: { overturn_run_id: runId } })`.
+   *
+   * ```ts
+   * const { runId } = await ov.recordPurchase({
+   *   externalId: order.id,
+   *   agent: "purchasing-agent",
+   *   snapshot: { instruction: "Order more blue mugs under $30", catalogue, cart },
+   *   decision: { action: "buy", items: [{ sku: "MUG-B", quantity: 2 }] },
+   *   model: "openai/gpt-4.1-mini",
+   * });
+   * ```
+   */
+  async recordPurchase(input: {
+    externalId: string;
+    agent?: string;
+    snapshot: PurchaseSnapshot;
+    decision: PurchaseDecision;
+    /** provider/model, so the scorecard can split the money by model version. */
+    model?: string | null;
+    agentVersion?: string | null;
+    tags?: string[];
+    metadata?: Record<string, unknown>;
+  }): Promise<{ runId: string; metadata: Record<string, string> }> {
+    const runId = randomUUID();
+    const stepId = randomUUID();
+    const now = new Date().toISOString();
+    const agent = input.agent ?? "purchasing-agent";
+    const slash = (input.model ?? "").indexOf("/");
+    const provider = slash > 0 ? input.model!.slice(0, slash) : null;
+    const model = slash > 0 ? input.model!.slice(slash + 1) : (input.model ?? null);
+
+    this.emitRun({
+      id: runId,
+      externalId: input.externalId,
+      agent,
+      agentVersion: input.agentVersion ?? null,
+      status: "completed",
+      input: input.snapshot as unknown as Record<string, unknown>,
+      output: input.decision as unknown as Record<string, unknown>,
+      ...(input.metadata ? { metadata: input.metadata } : {}),
+      tags: ["commerce", ...(input.tags ?? [])],
+      startedAt: now,
+      endedAt: now,
+    });
+    this.emitStep({
+      id: stepId,
+      runId,
+      seq: 0,
+      kind: "llm_call",
+      name: "purchase_decision",
+      model,
+      provider,
+      input: {
+        messages: [
+          { role: "system", content: purchaseSystemPrompt(agent) },
+          { role: "user", content: renderPurchaseSnapshot(input.snapshot) },
+        ],
+      },
+      output: {
+        message: { role: "assistant", content: JSON.stringify(input.decision) },
+        finish_reason: "stop",
+      },
+      startedAt: now,
+      endedAt: now,
+    });
+    // The webhook can arrive seconds after the charge, so this one is not left in the batch.
+    await this.flush();
+    return {
+      runId,
+      // Copy these onto the payment or order; the refund webhook reads them back.
+      metadata: { overturn_run_id: runId, overturn_external_id: input.externalId, overturn_agent: agent },
+    };
   }
 
   /**

@@ -1,5 +1,6 @@
 import { JSONPath } from "jsonpath-plus";
 import { isToolDecision } from "./cases.js";
+import { formatMoney, normalizeSku, type PurchaseLine, purchaseDecisionFrom } from "./commerce.js";
 import { canonicalJSON, toolFingerprint } from "./fingerprint.js";
 import type { CorrectionKind, ScorerName } from "./schemas.js";
 
@@ -276,6 +277,92 @@ export async function scoreShouldEscalate(input: ScoreInput, ctx: ScorerContext)
     : { score: 0, passed: false, reason: "output does not escalate" };
 }
 
+/**
+ * The commerce pack's scorer. A refund says the agent bought the wrong thing; this asks whether
+ * it would do it again, given exactly what it saw.
+ *
+ * Passes when the agent declines to buy, or buys what the human corrected it to. Fails when it
+ * buys a refunded item again — that is the recurrence the CI gate exists to block — and when it
+ * buys something nobody sanctioned. Config: `refunded` (the skus the human refunded),
+ * `matchQuantity` (default true) and `maxUnitPriceCents` (a ceiling the agent must not exceed).
+ */
+export async function scorePurchaseDecision(input: ScoreInput): Promise<ScoreResult> {
+  const expected = purchaseDecisionFrom(input.expected);
+  const actual = purchaseDecisionFrom(input.actual);
+  if (!actual) {
+    return { score: 0, passed: false, reason: "no purchase decision in the output" };
+  }
+
+  const refunded = new Set(
+    (Array.isArray(input.config.refunded) ? (input.config.refunded as unknown[]) : [])
+      .map((v) => (typeof v === "string" ? v : ((v as PurchaseLine | null)?.sku ?? "")))
+      .filter((s): s is string => s.length > 0)
+      .map(normalizeSku),
+  );
+
+  if (actual.action === "decline") {
+    return { score: 1, passed: true, reason: "declined to buy" };
+  }
+
+  // The one outcome that costs money again.
+  const repeat = actual.items.find((i) => refunded.has(normalizeSku(i.sku)));
+  if (repeat) {
+    return { score: 0, passed: false, reason: `bought the refunded item again (${repeat.sku})` };
+  }
+
+  const ceiling = typeof input.config.maxUnitPriceCents === "number" ? input.config.maxUnitPriceCents : null;
+  if (ceiling !== null) {
+    const over = actual.items.find((i) => i.unitPriceCents != null && i.unitPriceCents > ceiling);
+    if (over) {
+      return {
+        score: 0,
+        passed: false,
+        reason: `paid ${formatMoney(over.unitPriceCents ?? 0)} for ${over.sku}, over the ${formatMoney(ceiling)} ceiling`,
+      };
+    }
+  }
+
+  if (!expected || expected.action === "decline") {
+    return {
+      score: 0,
+      passed: false,
+      reason: `should not have bought; bought ${actual.items.map((i) => i.sku).join(", ") || "nothing named"}`,
+    };
+  }
+
+  const matchQuantity = input.config.matchQuantity !== false;
+  const want = new Map(expected.items.map((i) => [normalizeSku(i.sku), i]));
+  const got = new Map(actual.items.map((i) => [normalizeSku(i.sku), i]));
+  const missing = [...want.keys()].filter((s) => !got.has(s));
+  const extra = [...got.keys()].filter((s) => !want.has(s));
+  if (missing.length === 0 && extra.length === 0) {
+    const wrongQty = matchQuantity
+      ? [...want.entries()].filter(([s, i]) => got.get(s)?.quantity !== i.quantity)
+      : [];
+    if (wrongQty.length === 0) {
+      return { score: 1, passed: true, reason: "bought the corrected item" };
+    }
+    const [sku, line] = wrongQty[0]!;
+    return {
+      score: 0.5,
+      passed: false,
+      reason: `right item ${sku}, wrong quantity (expected ${line.quantity}, got ${got.get(sku)?.quantity})`,
+    };
+  }
+  const total = want.size + extra.length;
+  const overlap = [...want.keys()].filter((s) => got.has(s)).length;
+  return {
+    score: total === 0 ? 0 : overlap / total,
+    passed: false,
+    reason: [
+      missing.length ? `did not buy ${missing.join(", ")}` : null,
+      extra.length ? `bought ${extra.join(", ")} instead` : null,
+    ]
+      .filter(Boolean)
+      .join("; "),
+  };
+}
+
 export async function score(input: ScoreInput, ctx: ScorerContext = {}): Promise<ScoreResult> {
   switch (input.scorer) {
     case "equals":
@@ -292,6 +379,8 @@ export async function score(input: ScoreInput, ctx: ScorerContext = {}): Promise
       return scoreNotEquals(input, ctx);
     case "should_escalate":
       return scoreShouldEscalate(input, ctx);
+    case "purchase_decision":
+      return scorePurchaseDecision(input);
   }
 }
 

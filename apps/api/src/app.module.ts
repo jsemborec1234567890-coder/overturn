@@ -5,6 +5,8 @@ import { CaptureController } from "./capture/capture.controller";
 import { CaptureService } from "./capture/capture.service";
 import { CasesController } from "./cases/cases.controller";
 import { CasesService } from "./cases/cases.service";
+import { CommerceController } from "./commerce/commerce.controller";
+import { CommerceService } from "./commerce/commerce.service";
 import { APP_CONFIG, type AppConfig, loadConfig } from "./config";
 import { CorrectionsController } from "./corrections/corrections.controller";
 import { CorrectionsService } from "./corrections/corrections.service";
@@ -45,6 +47,7 @@ export class AppModule {
         RunsController,
         CorrectionsController,
         CaptureController,
+        CommerceController,
         CasesController,
         ReplayController,
         ExportController,
@@ -59,6 +62,7 @@ export class AppModule {
         CasesService,
         CorrectionsService,
         CaptureService,
+        CommerceService,
         PromptsService,
         ReplayService,
         ExportService,

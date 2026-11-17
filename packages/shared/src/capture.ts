@@ -1,3 +1,4 @@
+import { COMMERCE_REASON_CODES } from "./commerce.js";
 import type { CaptureAnswer, CaptureMessage } from "./schemas.js";
 
 /** Whitespace-insensitive comparison: a re-wrapped paragraph is the same answer. */
@@ -109,22 +110,36 @@ export const SUPPORT_REASON_CODES = [
   { code: "wrong_language_or_format", label: "Wrong language / format" },
 ] as const;
 
-export type ReasonPack = "claims" | "support";
+export type ReasonPack = "claims" | "support" | "commerce";
 export type ReasonCodeOption = { readonly code: string; readonly label: string };
 
 /** The quick-pick reasons an installer chooses from; one pack per workflow. */
 export const REASON_PACKS: Record<ReasonPack, readonly ReasonCodeOption[]> = {
   claims: CLAIMS_REASON_CODES,
   support: SUPPORT_REASON_CODES,
+  commerce: COMMERCE_REASON_CODES,
 };
 
-/** Support is the default pack; a claims team opts in with `reason_pack = claims`. */
+/** Support is the default pack; claims and commerce teams opt in with `reason_pack`. */
 export function reasonPackFrom(raw: unknown): ReasonPack {
-  return raw === "claims" ? "claims" : "support";
+  if (raw === "claims") return "claims";
+  if (raw === "commerce") return "commerce";
+  return "support";
 }
 
 /** Corrections with these codes are kept as evidence but never enter the suite or the export. */
-export const SUITE_EXCLUDED_REASON_CODES: readonly string[] = ["tone_wording"];
+/**
+ * Kept as evidence, never replayed, never exported. A tone fix is a preference rather than a rule;
+ * the three commerce codes are refunds nobody has blamed the agent for, or has blamed on something
+ * the agent could not have decided differently. A human attributing one to the agent moves it into
+ * the suite; until then it is a record of money, not a test.
+ */
+export const SUITE_EXCLUDED_REASON_CODES: readonly string[] = [
+  "tone_wording",
+  "unattributed",
+  "fraudulent",
+  "late_or_undeliverable",
+];
 
 export function reasonCodeLabel(code: string | null | undefined): string | null {
   if (!code) return null;
