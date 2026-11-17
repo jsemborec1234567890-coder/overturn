@@ -1,4 +1,4 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 
 // ---------- primitives ----------
 
@@ -632,8 +632,6 @@ export const captureSourceSchema = z.enum([
   "gorgias",
   "gmail",
   "salesforce",
-  "gmail",
-  "salesforce",
   "stripe",
   "rye",
   "zinc",
@@ -843,7 +841,7 @@ const modelIdSchema = z.string().regex(/^[a-z0-9_-]+\/.+$/i, "model must be prov
 export const replayCreateSchema = z.object({
   /** provider/model, e.g. openai/gpt-4.1-mini, anthropic/claude-sonnet-4-5, fake/fake-triage-weak */
   model: modelIdSchema,
-  /** More models to replay the same cases against, as one group (a case Ă— model matrix). */
+  /** More models to replay the same cases against, as one group (a case × model matrix). */
   models: z.array(modelIdSchema).max(8).optional(),
   mode: replayModeSchema.default("step"),
   /** name@version of a registered prompt; replaces the system prompt in step mode */
